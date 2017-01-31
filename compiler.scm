@@ -1,6 +1,5 @@
 (load "compiler_hw3.scm")
 
-
 ;;;none-clear;;;
 ;starg (inlib/char&io/ in some files)
 ;addr(0) (in lib/system/malloc)
@@ -8,42 +7,81 @@
 (define code-gen
 	(lambda (pe)
 		(cond ((equal? pe `(const #f)) 
-			    "MOV(R0, IMM(0));\n ")
+			    "MOV(R0, IMM('0'));\n ")
 			  ((equal? pe `(const #t)) 
-			    "MOV(R0, IMM(1));\n ")
+			    "MOV(R0, IMM('1'));\n ")
 			  (else ""))))
 
 (define compile-scheme-file
-	(lambda (scm_src_file)
+	(lambda (scm_src_file asm_target_file)
 		(let* ((scm_content (file->string scm_src_file))
 			   (match_and_remain (test-string <Sexpr> scm_content))
 			   (sexprs_list (create_sexprs_list scm_content))
 			   (super_parsed_list (parsed_and_hw3 sexprs_list))
 			   (constant_table (build_constant_table super_parsed_list))
 			   (global_var_table (build_global_var_table super_parsed_list))
-			   (ass_instructions_list (build_ass_insts_list super_parsed_list))
-			   (ass_instructions_string (build_ass_insts_string "" ass_instructions_list)))
-			ass_instructions_list)))
+			   (asm_instructions_list (build_asm_insts_list super_parsed_list))
+			   (asm_instructions_string (build_asm_insts_string asm_instructions_list))
+			   (final_asm (add_prologue_epilgue asm_instructions_string)))
+			(string->file final_asm asm_target_file))))
 
 
-(define build_ass_insts_list
+(define build_asm_insts_list
 	(lambda (super_parsed_list)
 		(if (null? super_parsed_list)
 			(list)
 			(cons (add_r0_print (code-gen (car super_parsed_list)))
-				  (build_ass_insts_list (cdr super_parsed_list))))))
+				  (build_asm_insts_list (cdr super_parsed_list))))))
 
 (define add_r0_print
-	(lambda (ass_string)
-		(let* ((chars_list (string->list ass_string))
-			   (r0_print_inst "OUT(IMM(2), R0);\n ")
-			   (chars_print (string->list r0_print_inst))
-			   (inst_and_print (list->string (append chars_list chars_print))))
-			inst_and_print)))
+	(lambda (asm_string)
+		(string-append asm_string "OUT(IMM(2), R0);\n ")))
 
-(define ass_instructions_string
-	(lambda (acc_string insts_list)
-		()
+(define build_asm_insts_string
+	(lambda (insts_list)
+		(if (null? insts_list)
+			""
+			(string-append (car insts_list) (build_asm_insts_string (cdr insts_list))))))
+
+
+(define add_prologue_epilgue
+	(lambda (asm_insts_string)
+		(string-append "
+						#include <stdio.h>
+						#include <stdlib.h>
+
+						/* change to 0 for no debug info to be printed: */
+						#define DO_SHOW 1
+
+						#include \"cisc.h\"
+
+						int main()
+						{
+						  START_MACHINE;
+
+						  JUMP(CONTINUE);
+
+						#include \"char.lib\"
+						#include \"io.lib\"
+						#include \"math.lib\"
+						#include \"string.lib\"
+						#include \"system.lib\"
+
+						 CONTINUE:
+
+						 PUSH(FP);
+						 MOV(FP, SP);
+
+						"
+			             asm_insts_string
+
+						" POP(FP);
+						  STOP_MACHINE;
+
+  						return 0;
+						}"
+						)))
+
 
 
 ;TODO
@@ -92,3 +130,10 @@
 									(cons ch (run)))))))
 
 				(list->string (run))))))
+
+
+(define string->file
+	(lambda (string out-file)
+		(let ((out-port (open-output-file out-file)))
+			(begin (display string out-port)
+				   (close-output-port out-port)))))
