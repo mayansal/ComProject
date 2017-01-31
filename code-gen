@@ -1,0 +1,94 @@
+(load "compiler_hw3.scm")
+
+
+;;;none-clear;;;
+;starg (inlib/char&io/ in some files)
+;addr(0) (in lib/system/malloc)
+
+(define code-gen
+	(lambda (pe)
+		(cond ((equal? pe `(const #f)) 
+			    "MOV(R0, IMM(0));\n ")
+			  ((equal? pe `(const #t)) 
+			    "MOV(R0, IMM(1));\n ")
+			  (else ""))))
+
+(define compile-scheme-file
+	(lambda (scm_src_file)
+		(let* ((scm_content (file->string scm_src_file))
+			   (match_and_remain (test-string <Sexpr> scm_content))
+			   (sexprs_list (create_sexprs_list scm_content))
+			   (super_parsed_list (parsed_and_hw3 sexprs_list))
+			   (constant_table (build_constant_table super_parsed_list))
+			   (global_var_table (build_global_var_table super_parsed_list))
+			   (ass_instructions_list (build_ass_insts_list super_parsed_list))
+			   (ass_instructions_string (build_ass_insts_string "" ass_instructions_list)))
+			ass_instructions_list)))
+
+
+(define build_ass_insts_list
+	(lambda (super_parsed_list)
+		(if (null? super_parsed_list)
+			(list)
+			(cons (add_r0_print (code-gen (car super_parsed_list)))
+				  (build_ass_insts_list (cdr super_parsed_list))))))
+
+(define add_r0_print
+	(lambda (ass_string)
+		(let* ((chars_list (string->list ass_string))
+			   (r0_print_inst "OUT(IMM(2), R0);\n ")
+			   (chars_print (string->list r0_print_inst))
+			   (inst_and_print (list->string (append chars_list chars_print))))
+			inst_and_print)))
+
+(define ass_instructions_string
+	(lambda (acc_string insts_list)
+		()
+
+
+;TODO
+(define build_constant_table
+	(lambda (super_parsed_list)
+		(list)))
+
+;TODO
+(define build_global_var_table
+	(lambda (super_parsed_list)
+		(list)))
+
+(define parsed_and_hw3 
+	(lambda (sexprs_list)
+		(if (null? sexprs_list)
+			(list)
+			(cons (annotate-tc
+				   	 (pe->lex-pe
+				   	   (box-set
+				   	      (remove-applic-lambda-nil
+				   	      	(eliminate-nested-defines 
+				   	      		(parse (car sexprs_list)))))))
+				   (parsed_and_hw3 (cdr sexprs_list))))))
+
+(define create_sexprs_list
+	(lambda (scm_content)
+		(if (equal? scm_content "")
+			(list)
+			(let* ((match_and_remain (test-string <Sexpr> scm_content))
+				   (match (cadar match_and_remain))
+				   (remain (cadadr match_and_remain)))
+				(cons match (create_sexprs_list remain))))))
+
+
+
+(define file->string
+	(lambda (in-file)
+		(let ((in-port (open-input-file in-file)))
+			(letrec ((run
+						(lambda ()
+							(let ((ch (read-char in-port)))
+								(if (eof-object? ch)
+									(begin
+										(close-input-port in-port)
+										'())
+									(cons ch (run)))))))
+
+				(list->string (run))))))
