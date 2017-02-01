@@ -6,10 +6,28 @@
 
 (define code-gen
 	(lambda (pe)
-		(cond ((equal? pe `(const #f)) 
-			    "MOV(R0, IMM('0'));\n ")
+		(cond ((equal? pe `(const ,(void)))
+			    "MOV(R0, IMM(SOB_VOID));\n
+ 				 PUSH(R0);\n
+ 				 CALL(WRITE_SOB_VOID);\n
+ 				 DROP(1);\n")
+			   ((equal? pe `(applic (fvar list) ()))
+			    "MOV(R0, IMM(SOB_NIL));\n
+ 				 PUSH(R0);\n
+ 				 CALL(WRITE_SOB_NIL);\n
+ 				 DROP(1);\n")
+			   ((equal? pe `(const #f)) 
+			    "MOV(R0, IMM(SOB_FALSE));\n
+ 				 PUSH(R0);\n
+ 				 CALL(WRITE_SOB_BOOL);\n
+ 				 DROP(1);\n")
 			  ((equal? pe `(const #t)) 
-			    "MOV(R0, IMM('1'));\n ")
+			    "MOV(R0, IMM(SOB_TRUE));\n
+ 				 PUSH(R0);\n
+ 				 CALL(WRITE_SOB_BOOL);\n
+ 				 DROP(1);\n")
+			  ; ((equal? (car pe) 'if3)
+			  ; 	)
 			  (else ""))))
 
 (define compile-scheme-file
@@ -24,7 +42,7 @@
 			   (asm_instructions_string (build_asm_insts_string asm_instructions_list))
 			   (final_asm (add_prologue_epilgue asm_instructions_string)))
 			(string->file final_asm asm_target_file))))
-
+;super_parsed_list)))
 
 (define build_asm_insts_list
 	(lambda (super_parsed_list)
@@ -33,9 +51,11 @@
 			(cons (add_r0_print (code-gen (car super_parsed_list)))
 				  (build_asm_insts_list (cdr super_parsed_list))))))
 
+;TODO
 (define add_r0_print
 	(lambda (asm_string)
-		(string-append asm_string "OUT(IMM(2), R0);\n ")))
+		;(string-append asm_string "OUT(IMM(2), R0);\n ")
+		asm_string))
 
 (define build_asm_insts_string
 	(lambda (insts_list)
@@ -44,42 +64,66 @@
 			(string-append (car insts_list) (build_asm_insts_string (cdr insts_list))))))
 
 
+; /* change to 0 for no debug info to be printed: */
+; #define DO_SHOW 1
+
 (define add_prologue_epilgue
 	(lambda (asm_insts_string)
 		(string-append "
-						#include <stdio.h>
-						#include <stdlib.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-						/* change to 0 for no debug info to be printed: */
-						#define DO_SHOW 1
+#include \"cisc.h\"
 
-						#include \"cisc.h\"
+/* change to 0 for no debug info to be printed: */
+#define DO_SHOW 1
 
-						int main()
-						{
-						  START_MACHINE;
+#include \"debug_macros.h\"
 
-						  JUMP(CONTINUE);
+int main()
+{
+  START_MACHINE;
 
-						#include \"char.lib\"
-						#include \"io.lib\"
-						#include \"math.lib\"
-						#include \"string.lib\"
-						#include \"system.lib\"
+  JUMP(CONTINUE);
 
-						 CONTINUE:
+#include \"char.lib\"
+#include \"io.lib\"
+#include \"math.lib\"
+#include \"string.lib\"
+#include \"system.lib\"
+#include \"scheme.lib\"
 
-						 PUSH(FP);
-						 MOV(FP, SP);
+ CONTINUE:
 
-						"
-			             asm_insts_string
+/*TODO - should entered the constant_table*/
+MOV (IND(0), IMM(T_VOID))
+#define SOB_VOID 0
+MOV (IND(1), IMM(T_NIL))
+#define SOB_NIL 1
+MOV (IND(2), IMM(T_BOOL))
+MOV (IND(3), IMM(0))
+#define SOB_FALSE 2
+MOV (IND(4), IMM(T_BOOL))
+MOV (IND(5), IMM(1))
+#define SOB_TRUE 4
 
-						" POP(FP);
-						  STOP_MACHINE;
 
-  						return 0;
-						}"
+
+ PUSH(FP);
+ MOV(FP, SP);
+
+"
+ asm_insts_string
+
+" POP(FP);
+
+/*TODO - remove info - for debug*/
+ INFO;
+
+  STOP_MACHINE;
+
+	return 0;
+}"
 						)))
 
 
