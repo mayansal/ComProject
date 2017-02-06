@@ -41,7 +41,7 @@
 			  	 	   (count_str (number->string count)))
 			  	 	(string-append (code-gen test)
 			  	 				    "CMP (R0, IMM(SOB_FALSE));\n"
-			  	 				    "JUMP_EQ (L_if3_else_"count_str");\n" ;TODO
+			  	 				    "JUMP_EQ (L_if3_else_"count_str");\n"
 			  	 				    (code-gen dit)
 			  	 				    "JUMP (L_if3_exit_"count_str");\n"
 			  	 				    "L_if3_else_"count_str":\n"
@@ -78,6 +78,7 @@
 			(string->file final_asm asm_target_file))))
 ;super_parsed_list)))
 
+;TODO - ONLY ONE S-EXP
 (define build_asm_insts_list
 	(lambda (super_parsed_list)
 		(if (null? super_parsed_list)
@@ -85,7 +86,7 @@
 			(cons (add_r0_print (code-gen (car super_parsed_list)))
 				  (build_asm_insts_list (cdr super_parsed_list))))))
 
-;TODO
+;TODO - PROBABLY REMOVE
 (define add_r0_print
 	(lambda (asm_string)
 		;(string-append asm_string "OUT(IMM(2), R0);\n ")
