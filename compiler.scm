@@ -4,30 +4,64 @@
 ;starg (inlib/char&io/ in some files)
 ;addr(0) (in lib/system/malloc)
 
+(define count 0)
+
 (define code-gen
 	(lambda (pe)
 		(cond ((equal? pe `(const ,(void)))
-			    "MOV(R0, IMM(SOB_VOID));\n
- 				 PUSH(R0);\n
- 				 CALL(WRITE_SOB_VOID);\n
- 				 DROP(1);\n")
+				(string-append
+					"MOV(R0, IMM(SOB_VOID));\n"
+					"PUSH(R0);\n"
+					"CALL(WRITE_SOB_VOID);\n"
+					"POP(R0);\n"))
 			   ((equal? pe `(applic (fvar list) ()))
-			    "MOV(R0, IMM(SOB_NIL));\n
- 				 PUSH(R0);\n
- 				 CALL(WRITE_SOB_NIL);\n
- 				 DROP(1);\n")
-			   ((equal? pe `(const #f)) 
-			    "MOV(R0, IMM(SOB_FALSE));\n
- 				 PUSH(R0);\n
- 				 CALL(WRITE_SOB_BOOL);\n
- 				 DROP(1);\n")
-			  ((equal? pe `(const #t)) 
-			    "MOV(R0, IMM(SOB_TRUE));\n
- 				 PUSH(R0);\n
- 				 CALL(WRITE_SOB_BOOL);\n
- 				 DROP(1);\n")
-			  ; ((equal? (car pe) 'if3)
-			  ; 	)
+			   	 (string-append
+				    "MOV(R0, IMM(SOB_NIL));\n"
+	 				"PUSH(R0);\n"
+	 				"CALL(WRITE_SOB_NIL);\n"
+	 				"POP(R0);\n"))
+			   ((equal? pe `(const #f))
+			   	 (string-append
+				    "MOV(R0, IMM(SOB_FALSE));\n"
+	 				"PUSH(R0);\n"
+	 				"CALL(WRITE_SOB_BOOL);\n"
+	 				"POP(R0);\n"))
+			   ((equal? pe `(const #t)) 
+			  	 (string-append
+				    "MOV(R0, IMM(SOB_TRUE));\n"
+	 				"PUSH(R0);\n"
+	 				"CALL(WRITE_SOB_BOOL);\n"
+	 				"POP(R0);\n"))
+			  ((and (pair? pe) 
+			  	    (equal? (car pe) 'if3))
+			  	 (set! count (+ count 1))
+			  	 (let ((test (cadr pe))
+			  	 	   (dit (caddr pe))
+			  	 	   (dif (cadddr pe))
+			  	 	   (count_str (number->string count)))
+			  	 	(string-append (code-gen test)
+			  	 				    "CMP (R0, IMM(SOB_FALSE));\n"
+			  	 				    "JUMP_EQ (L_if3_else_"count_str");\n" ;TODO
+			  	 				    (code-gen dit)
+			  	 				    "JUMP (L_if3_exit_"count_str");\n"
+			  	 				    "L_if3_else_"count_str":\n"
+			  	 				    (code-gen dif)
+			  	 				    "L_if3_exit_"count_str":\n")))
+			  ((and (pair? pe)
+			  		(equal? (car pe) 'or))
+			  	(set! count (+ count 1))
+			  	(let ((or_exps (cadr pe))
+			  		  (count_str (number->string count)))
+			  		(letrec ((run (lambda (lst)
+			  						 (if (equal? (length lst) 1)
+			  						 	 (string-append (code-gen (car lst))
+			  						 	 				"L_or_exit_"count_str":\n")
+			  						 	 (string-append (code-gen (car lst))
+			  						 	 				"CMP(R0, IMM(SOB_FALSE));\n"
+			  						 	 				"JUMP_NE(L_or_exit_"count_str");\n"
+			  						 	 				(run (cdr lst)))))))
+			  			 (run or_exps))))
+			  
 			  (else ""))))
 
 (define compile-scheme-file
@@ -82,9 +116,9 @@
 
 int main()
 {
-  START_MACHINE;
+START_MACHINE;
 
-  JUMP(CONTINUE);
+JUMP(CONTINUE);
 
 #include \"char.lib\"
 #include \"io.lib\"
@@ -93,7 +127,7 @@ int main()
 #include \"system.lib\"
 #include \"scheme.lib\"
 
- CONTINUE:
+CONTINUE:
 
 /*TODO - should entered the constant_table*/
 MOV (IND(0), IMM(T_VOID))
@@ -109,20 +143,20 @@ MOV (IND(5), IMM(1))
 
 
 
- PUSH(FP);
- MOV(FP, SP);
+PUSH(FP);
+MOV(FP, SP);
 
 "
  asm_insts_string
-
-" POP(FP);
+"
+POP(FP);
 
 /*TODO - remove info - for debug*/
- INFO;
+INFO;
 
-  STOP_MACHINE;
+STOP_MACHINE;
 
-	return 0;
+return 0;
 }"
 						)))
 
