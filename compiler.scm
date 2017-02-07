@@ -7,7 +7,7 @@
 (define count 0)
 
 (define code-gen
-	(lambda (pe)
+	(lambda (pe major)
 		(cond ((equal? pe `(const ,(void)))
 				(string-append
 					"MOV(R0, IMM(SOB_VOID));\n"
@@ -39,13 +39,13 @@
 			  	 	   (dit (caddr pe))
 			  	 	   (dif (cadddr pe))
 			  	 	   (count_str (number->string count)))
-			  	 	(string-append (code-gen test)
+			  	 	(string-append (code-gen test major)
 			  	 				    "CMP (R0, IMM(SOB_FALSE));\n"
 			  	 				    "JUMP_EQ (L_if3_else_"count_str");\n"
-			  	 				    (code-gen dit)
+			  	 				    (code-gen dit major)
 			  	 				    "JUMP (L_if3_exit_"count_str");\n"
 			  	 				    "L_if3_else_"count_str":\n"
-			  	 				    (code-gen dif)
+			  	 				    (code-gen dif major)
 			  	 				    "L_if3_exit_"count_str":\n")))
 			  ((and (pair? pe)
 			  		(equal? (car pe) 'or))
@@ -54,14 +54,104 @@
 			  		  (count_str (number->string count)))
 			  		(letrec ((run (lambda (lst)
 			  						 (if (equal? (length lst) 1)
-			  						 	 (string-append (code-gen (car lst))
+			  						 	 (string-append (code-gen (car lst) major)
 			  						 	 				"L_or_exit_"count_str":\n")
-			  						 	 (string-append (code-gen (car lst))
+			  						 	 (string-append (code-gen (car lst) major)
 			  						 	 				"CMP(R0, IMM(SOB_FALSE));\n"
 			  						 	 				"JUMP_NE(L_or_exit_"count_str");\n"
 			  						 	 				(run (cdr lst)))))))
 			  			 (run or_exps))))
-			  
+			  ((and (pair? pe) 
+			  		(equal? (car pe) 'applic))
+			  	(set! count (+ count 1))
+			  	(let* ((proc (cadr pe))
+			  		   (args (caddr pe))
+			  		   (args_count (length args))
+			  		   (args_count_str (number->string args_count))
+			  		   (count_str (number->string count)))
+			  		(letrec ((run (lambda (lst) 
+			  						 (if (null? lst)
+			  						 	 (string-append 
+			  						 	   "PUSH ("args_count_str");\n"
+  						 				   (code-gen proc major)
+  						 				   "CMP (INDD(R0, 3),IMM(T_CLOSURE));\n"
+  						 				   "JUMP_NE (L_error_cannot_apply_non_clos_"count_str");\n"
+  						 				   "PUSH (INDD(R0,1));\n"
+  						 				   "CALL (INDD(R0,2));\n"
+  						 				   "DROP (1);\n"
+  						 				   "POP (R1);\n"
+  						 				   "DROP(R1);\n"
+  						 				   "JUMP (L_applic_exit_"count_str");\n"
+  						 				   "L_error_cannot_apply_non_clos_"count_str":\n"
+  						 				   "L_applic_exit_"count_str":\n")
+			  						 	 (string-append 
+			  						 	   (code-gen (car lst) major)
+  						 				   "PUSH (R0);\n"
+  						 				   (run (cdr lst)))))))
+			  			(run (reverse args)))))
+			  ((and (pair? pe) 
+			  		(equal? (car pe) 'lambda-simple))
+			  	(set! count (+ count 1))
+			  	(let* ((params (cadr pe))
+			  		   (num_params (length params))
+			  		   (body (caddr pe))
+			  		   (count_str (number->string count))
+				  	   (major_str (number->string major)))
+			  	  (string-append 
+					"MOV (R1,FPARG(0));\n"	;env
+					"PUSH (IMM(1+"major_str"));\n" ;TODO- create lambdas counter "major"
+					"CALL(MALLOC);\n"
+					"DROP(1);\n"
+					"MOV (IND(R2),R0);\n"
+					(letrec ((shallow_copy 
+								(lambda (i j)
+								   (let ((i_str (number->string i))
+								   		 (j_str (number->string j)))
+									   (if (>= i major)
+									   	   ""
+									   	   (string-append 
+									   	   	  "MOV (INDD(R2,"j_str"),INDD(R1,"i_str"));\n"
+									   	   	  (shallow_copy (+ i 1) (+ j 1))))))))
+					   	(shallow_copy 0 1))
+					"MOV(R3,FPARG(1));\n"	;number of argumets
+					"PUSH(R3);\n"
+					"CALL(MALLOC);\n"
+					"DROP(1);\n"
+					"MOV (INDD(R2,0), R0);\n"
+					(letrec ((copy_stack_params 
+								(lambda (i j)
+								   (let ((i_str (number->string i))
+								   		 (j_str (number->string j)))
+									   (if (>= i num_params)
+									   	   ""
+									   	   (string-append 
+									   	   	  "MOV (INDD (INDD(R2,0),"i_str"),FPARG("j_str"));\n"
+									   	   	  (copy_stack_params (+ i 1) (+ j 1))))))))
+					   	(copy_stack_params 0 2))
+					"PUSH (IMM(3));\n"
+					"CALL(MALLOC);\n"
+					"DROP(1);\n"
+					"MOV (INDD(R0,0),IMM(T_CLOSURE));\n"
+					"MOV (INDD(R0,1),R2);\n"	;ext. env
+					
+					"MOV (INDD(R0,2),LABEL(L_clos_body_"count_str"));\n"
+					"JUMP (L_clos_exit_"count_str");\n"
+					
+					"L_clos_body_"count_str":\n"
+					"PUSH (FP);\n"
+					"MOV (FP,SP);\n"
+
+					"CMP (FPARG(1),IMM(3));\n"
+					"JUMP_NE (L_error_lambda_args_count_"count_str");\n"
+					(code-gen body (+ major 1))
+					"POP (FP);\n"
+					"RETURN;\n"		;return to caller
+
+					"JUMP (L_clos_exit_"count_str");\n" 	;TODO- remove this?
+					"L_error_lambda_args_count_"count_str":\n"
+					"L_clos_exit_"count_str":\n"
+					)))
+
 			  (else ""))))
 
 (define compile-scheme-file
@@ -83,7 +173,7 @@
 	(lambda (super_parsed_list)
 		(if (null? super_parsed_list)
 			(list)
-			(cons (add_r0_print (code-gen (car super_parsed_list)))
+			(cons (add_r0_print (code-gen (car super_parsed_list) 0))
 				  (build_asm_insts_list (cdr super_parsed_list))))))
 
 ;TODO - PROBABLY REMOVE
