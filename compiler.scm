@@ -8,31 +8,37 @@
 
 (define code-gen
 	(lambda (pe major)
-		(cond ((equal? pe `(const ,(void)))
+		(cond 
+			 ;void
+			  ((equal? pe `(const ,(void)))
 				(string-append
 					"MOV(R0, IMM(SOB_VOID));\n"
 					"PUSH(R0);\n"
 					"CALL(WRITE_SOB_VOID);\n"
 					"POP(R0);\n"))
+			  ;list
 			   ((equal? pe `(applic (fvar list) ()))
 			   	 (string-append
 				    "MOV(R0, IMM(SOB_NIL));\n"
 	 				"PUSH(R0);\n"
 	 				"CALL(WRITE_SOB_NIL);\n"
 	 				"POP(R0);\n"))
+			   ;#f
 			   ((equal? pe `(const #f))
 			   	 (string-append
 				    "MOV(R0, IMM(SOB_FALSE));\n"
 	 				"PUSH(R0);\n"
 	 				"CALL(WRITE_SOB_BOOL);\n"
 	 				"POP(R0);\n"))
+			   ;#t
 			   ((equal? pe `(const #t)) 
 			  	 (string-append
 				    "MOV(R0, IMM(SOB_TRUE));\n"
 	 				"PUSH(R0);\n"
 	 				"CALL(WRITE_SOB_BOOL);\n"
 	 				"POP(R0);\n"))
-			  ((and (pair? pe) 
+			   ;if
+			  	((and (pair? pe) 
 			  	    (equal? (car pe) 'if3))
 			  	 (set! count (+ count 1))
 			  	 (let ((test (cadr pe))
@@ -47,6 +53,7 @@
 			  	 				    "L_if3_else_"count_str":\n"
 			  	 				    (code-gen dif major)
 			  	 				    "L_if3_exit_"count_str":\n")))
+			  	;or
 			  ((and (pair? pe)
 			  		(equal? (car pe) 'or))
 			  	(set! count (+ count 1))
@@ -61,6 +68,7 @@
 			  						 	 				"JUMP_NE(L_or_exit_"count_str");\n"
 			  						 	 				(run (cdr lst)))))))
 			  			 (run or_exps))))
+			  ;applic
 			  ((and (pair? pe) 
 			  		(equal? (car pe) 'applic))
 			  	(set! count (+ count 1))
@@ -74,21 +82,24 @@
 			  						 	 (string-append 
 			  						 	   "PUSH ("args_count_str");\n"
   						 				   (code-gen proc major)
-  						 				   "CMP (INDD(R0, 3),IMM(T_CLOSURE));\n"
+  						 				   "CMP (INDD(R0, 0),IMM(T_CLOSURE));\n"
   						 				   "JUMP_NE (L_error_cannot_apply_non_clos_"count_str");\n"
   						 				   "PUSH (INDD(R0,1));\n"
-  						 				   "CALL (INDD(R0,2));\n"
+  						 				   "MOV (R4, INDD(R0,2));\n"
+  						 				   "CALLA (R4);\n"
   						 				   "DROP (1);\n"
   						 				   "POP (R1);\n"
   						 				   "DROP(R1);\n"
   						 				   "JUMP (L_applic_exit_"count_str");\n"
   						 				   "L_error_cannot_apply_non_clos_"count_str":\n"
+  						 				   "WRITE(\"NON-CLOS\");\n"
   						 				   "L_applic_exit_"count_str":\n")
 			  						 	 (string-append 
 			  						 	   (code-gen (car lst) major)
   						 				   "PUSH (R0);\n"
   						 				   (run (cdr lst)))))))
 			  			(run (reverse args)))))
+			  ;lambda-simple
 			  ((and (pair? pe) 
 			  		(equal? (car pe) 'lambda-simple))
 			  	(set! count (+ count 1))
@@ -102,7 +113,7 @@
 					"PUSH (IMM(1+"major_str"));\n" ;TODO- create lambdas counter "major"
 					"CALL(MALLOC);\n"
 					"DROP(1);\n"
-					"MOV (IND(R2),R0);\n"
+					"MOV (R2, R0);\n"
 					(letrec ((shallow_copy 
 								(lambda (i j)
 								   (let ((i_str (number->string i))
@@ -110,7 +121,8 @@
 									   (if (>= i major)
 									   	   ""
 									   	   (string-append 
-									   	   	  "MOV (INDD(R2,"j_str"),INDD(R1,"i_str"));\n"
+									   	   	  "MOV (R4, INDD(R1,"i_str"));\n"
+									   	   	  "MOV (INDD(R2,"j_str"), R4);\n"
 									   	   	  (shallow_copy (+ i 1) (+ j 1))))))))
 					   	(shallow_copy 0 1))
 					"MOV(R3,FPARG(1));\n"	;number of argumets
@@ -125,9 +137,12 @@
 									   (if (>= i num_params)
 									   	   ""
 									   	   (string-append 
-									   	   	  "MOV (INDD (INDD(R2,0),"i_str"),FPARG("j_str"));\n"
+									   	   	  "MOV (R4, (INDD(R2,0)));\n"
+									   	   	  "MOV (R5, FPARG("j_str"));\n"
+									   	   	  "MOV (INDD(R4, "i_str"), R5);\n"
 									   	   	  (copy_stack_params (+ i 1) (+ j 1))))))))
 					   	(copy_stack_params 0 2))
+
 					"PUSH (IMM(3));\n"
 					"CALL(MALLOC);\n"
 					"DROP(1);\n"
@@ -221,21 +236,23 @@ JUMP(CONTINUE);
 CONTINUE:
 
 /*TODO - should entered the constant_table*/
-MOV (IND(0), IMM(T_VOID))
-#define SOB_VOID 0
-MOV (IND(1), IMM(T_NIL))
-#define SOB_NIL 1
-MOV (IND(2), IMM(T_BOOL))
-MOV (IND(3), IMM(0))
-#define SOB_FALSE 2
-MOV (IND(4), IMM(T_BOOL))
-MOV (IND(5), IMM(1))
-#define SOB_TRUE 4
-
-
 
 PUSH(FP);
 MOV(FP, SP);
+
+PUSH(IMM(6));
+CALL(MALLOC);
+DROP(1);
+MOV(INDD(R0,0), IMM(T_VOID));
+#define SOB_VOID (INDD(R0,0))
+MOV(INDD(R0,1), IMM(T_NIL));
+#define SOB_NIL (INDD(R0,1))
+MOV(INDD(R0,2), IMM(T_BOOL));
+MOV(INDD(R0,3), IMM(0));
+#define SOB_FALSE (INDD(R0,2))
+MOV(INDD(R0,4), IMM(T_BOOL));
+MOV(INDD(R0,5), IMM(1));
+#define SOB_TRUE (INDD(R0,4))
 
 "
  asm_insts_string
