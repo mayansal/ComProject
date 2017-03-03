@@ -69,36 +69,35 @@
 			  						 	 				(run (cdr lst)))))))
 			  			 (run or_exps))))
 			  ;applic
-			  ((and (pair? pe) 
-			  		(equal? (car pe) 'applic))
-			  	(set! count (+ count 1))
-			  	(let* ((proc (cadr pe))
-			  		   (args (caddr pe))
-			  		   (args_count (length args))
-			  		   (args_count_str (number->string args_count))
-			  		   (count_str (number->string count)))
-			  		(letrec ((run (lambda (lst) 
-			  						 (if (null? lst)
-			  						 	 (string-append 
-			  						 	   "PUSH ("args_count_str");\n"
-  						 				   (code-gen proc major)
-  						 				   "CMP (INDD(R0, 0),IMM(T_CLOSURE));\n"
-  						 				   "JUMP_NE (L_error_cannot_apply_non_clos_"count_str");\n"
-  						 				   "PUSH (INDD(R0,1));\n"
-  						 				   "MOV (R4, INDD(R0,2));\n"
-  						 				   "CALLA (R4);\n"
-  						 				   "DROP (1);\n"
-  						 				   "POP (R1);\n"
-  						 				   "DROP(R1);\n"
-  						 				   "JUMP (L_applic_exit_"count_str");\n"
-  						 				   "L_error_cannot_apply_non_clos_"count_str":\n"
-  						 				   "WRITE(\"NON-CLOS\");\n"
-  						 				   "L_applic_exit_"count_str":\n")
-			  						 	 (string-append 
-			  						 	   (code-gen (car lst) major)
-  						 				   "PUSH (R0);\n"
-  						 				   (run (cdr lst)))))))
-			  			(run (reverse args)))))
+			  ; ((and (pair? pe) 
+			  ; 		(equal? (car pe) 'applic))
+			  ; 	(set! count (+ count 1))
+			  ; 	(let* ((proc (cadr pe))
+			  ; 		   (args (caddr pe))
+			  ; 		   (args_count (length args))
+			  ; 		   (args_count_str (number->string args_count))
+			  ; 		   (count_str (number->string count)))
+			  ; 		(letrec ((run (lambda (lst) 
+			  ; 						 (if (null? lst)
+			  ; 						 	 (string-append 
+			  ; 						 	   "PUSH ("args_count_str");\n"
+  			; 			 				   (code-gen proc major)
+  			; 			 				   "CMP (INDD(R0, 0),IMM(T_CLOSURE));\n"
+  			; 			 				   "JUMP_NE (L_error_cannot_apply_non_clos_"count_str");\n"
+  			; 			 				   "PUSH (INDD(R0,1));\n"
+  			; 			 				   "MOV (R4, INDD(R0,2));\n"
+  			; 			 				   "CALLA (R4);\n"
+  			; 			 				   "DROP (1);\n"
+  			; 			 				   "POP (R1);\n"
+  			; 			 				   "DROP(R1);\n"
+  			; 			 				   "JUMP (L_applic_exit_"count_str");\n"
+  			; 			 				   "L_error_cannot_apply_non_clos_"count_str":\n"
+  			; 			 				   "L_applic_exit_"count_str":\n")
+			  ; 						 	 (string-append 
+			  ; 						 	   (code-gen (car lst) major)
+  			; 			 				   "PUSH (R0);\n"
+  			; 			 				   (run (cdr lst)))))))
+			  ; 			(run (reverse args)))))
 			  ;lambda-simple
 			  ((and (pair? pe) 
 			  		(equal? (car pe) 'lambda-simple))
@@ -130,18 +129,33 @@
 					"CALL(MALLOC);\n"
 					"DROP(1);\n"
 					"MOV (INDD(R2,0), R0);\n"
-					(letrec ((copy_stack_params 
-								(lambda (i j)
-								   (let ((i_str (number->string i))
-								   		 (j_str (number->string j)))
-									   (if (>= i num_params)
-									   	   ""
-									   	   (string-append 
-									   	   	  "MOV (R4, (INDD(R2,0)));\n"
-									   	   	  "MOV (R5, FPARG("j_str"));\n"
-									   	   	  "MOV (INDD(R4, "i_str"), R5);\n"
-									   	   	  (copy_stack_params (+ i 1) (+ j 1))))))))
-					   	(copy_stack_params 0 2))
+					; (letrec ((copy_stack_params 
+					; 			(lambda (i j)
+					; 			   (let ((i_str (number->string i))
+					; 			   		 (j_str (number->string j)))
+					; 				   (if (>= i num_params)
+					; 				   	   (number->string num_params)
+					; 				   	   (string-append 
+					; 				   	   	  "MOV (R4, (INDD(R2,0)));\n"
+					; 				   	   	  "MOV (R5, FPARG("j_str"));\n"
+					; 				   	   	  "MOV (INDD(R4, "i_str"), R5);\n"
+					; 				   	   	  (copy_stack_params (+ i 1) (+ j 1))))))))
+					;    	(copy_stack_params 0 2))
+					"MOV (R6, 0);\n" ;i
+					"MOV (R7, 2);\n" ;j
+					"L_clos_loop_"count_str":\n"
+					"CMP (R6, R3);\n"
+					"JUMP_GE (L_clos_loop_end_"count_str");\n"
+					"MOV (R4, (INDD(R2,0)));\n"
+					"MOV (R5, FPARG(R7));\n"
+					"MOV (INDD(R4, R6), R5);\n"
+					"AND (R6, 1);\n"
+					"AND (R7, 1);\n"
+					"JUMP (L_clos_loop_"count_str");\n"
+					"L_clos_loop_end_"count_str":\n"
+
+
+
 
 					"PUSH (IMM(3));\n"
 					"CALL(MALLOC);\n"
@@ -162,11 +176,20 @@
 					"POP (FP);\n"
 					"RETURN;\n"		;return to caller
 
-					"JUMP (L_clos_exit_"count_str");\n" 	;TODO- remove this?
+					; "JUMP (L_clos_exit_"count_str");\n" 	;TODO- remove this?
 					"L_error_lambda_args_count_"count_str":\n"
 					"L_clos_exit_"count_str":\n"
 					)))
-
+			  ((and (pair? pe) 
+			  		(equal? (car pe) 'bvar))
+			   (let* ((major (caddr pe))
+			   		 (minor (cadddr pe))
+			   		 (major_str (number->string major))
+			   		 (minor_str (number->string minor)))
+			   	(string-append
+			   		"MOV (R0, FPARG(0));\n" ;env
+			   		"MOV (R0, INDD(R0,"major_str"+1));\n"			   		
+			   		"MOV (R0, INDD(R0,"minor_str"));\n")))
 			  (else ""))))
 
 (define compile-scheme-file
